@@ -1,0 +1,6 @@
+*.db
+*.json
+*.pyc
+*.log
+.env
+temporary.py
