@@ -1,0 +1,5 @@
+*.pyc
+.env
+temporary.py
+data/
+logs/
