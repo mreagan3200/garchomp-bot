@@ -7,7 +7,7 @@ from util.RolesUtil import *
 from util.DataUtil import *
 
 import sqlite3
-import math
+import numpy as np
 import random
 from time import time
 import json
@@ -201,7 +201,7 @@ class Level(commands.Cog):
             xp = self.getXPToAdd(last_xp_s, current_time)
         if xp > 0:
             totalxp = min(info_tuple[1] + xp, 1000000)
-            newlevel = math.floor(math.pow(totalxp, 1/3))
+            newlevel = np.floor(np.cbrt(totalxp))
             if message:
                 cursor.execute('UPDATE levels SET level = ?, total_xp = ?, last_xp_s = ? WHERE user = ?', (newlevel, totalxp, current_time, user.id))
             else:
@@ -327,7 +327,7 @@ class Level(commands.Cog):
             await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
             return
         cursor = self.db.cursor()
-        level = max(math.floor(math.pow(xp, 1/3)), 1)
+        level = max(np.floor(np.cbrt(xp)), 1)
         await self.init_user_level(member)
         for role in member.roles:
             if role.name in level_roles:
