@@ -15,10 +15,7 @@ class DataUtil:
     
     def updateData(self, attrMap : dict):
         data = self.load()
-        print(attrMap)
         for key, value in attrMap.items():
-            value = value.replace('\\\\','\\')
-            print(value)
             data[key] = value
         with open(self.file, 'w') as data_file:
             json.dump(data, data_file, indent=4)

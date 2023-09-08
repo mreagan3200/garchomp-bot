@@ -26,7 +26,7 @@ class Level(commands.Cog):
         self.db = sqlite3.connect('data/bot_data.db')
         cursor = self.db.cursor()
         cursor.execute('CREATE TABLE IF NOT EXISTS levels (user INTEGER, level INTEGER, total_xp INTEGER, base_hp INTEGER, base_atk INTEGER, base_def INTEGER, base_spa INTEGER, base_spd INTEGER, base_spe INTEGER, last_xp_s INTEGER)')
-        cursor.execute('CREATE TABLE IF NOT EXISTS bag (user INTEGER, money INTEGER DEFAULT 0, xp_candy_xs SMALLINT DEFAULT 0, xp_candy_s SMALLINT DEFAULT 0, xp_candy_m SMALLINT DEFAULT 0, xp_candy_l SMALLINT DEFAULT 0, xp_candy_xl SMALLINT DEFAULT 0, rare_candy SMALLINT DEFAULT 0)')
+        cursor.execute('CREATE TABLE IF NOT EXISTS bag (user INTEGER, money INTEGER DEFAULT 3000, xp_candy_xs SMALLINT DEFAULT 0, xp_candy_s SMALLINT DEFAULT 0, xp_candy_m SMALLINT DEFAULT 0, xp_candy_l SMALLINT DEFAULT 0, xp_candy_xl SMALLINT DEFAULT 0, rare_candy SMALLINT DEFAULT 0)')
         cursor.close()
 
     def get_user_bag(self, member : nextcord.Member):
@@ -201,7 +201,7 @@ class Level(commands.Cog):
             xp = self.getXPToAdd(last_xp_s, current_time)
         if xp > 0:
             totalxp = min(info_tuple[1] + xp, 1000000)
-            newlevel = math.floor(math.cbrt(totalxp))
+            newlevel = math.floor(math.pow(totalxp, 1/3))
             if message:
                 cursor.execute('UPDATE levels SET level = ?, total_xp = ?, last_xp_s = ? WHERE user = ?', (newlevel, totalxp, current_time, user.id))
             else:
@@ -327,7 +327,7 @@ class Level(commands.Cog):
             await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
             return
         cursor = self.db.cursor()
-        level = max(math.floor(math.cbrt(xp)), 1)
+        level = max(math.floor(math.pow(xp, 1/3)), 1)
         await self.init_user_level(member)
         for role in member.roles:
             if role.name in level_roles:
@@ -373,7 +373,7 @@ class Level(commands.Cog):
         await interaction.response.send_message(file=file, embed=embed)
 
     @nextcord.slash_command(guild_ids=[1093195040320389200])
-    async def test(self, interaction : nextcord.Interaction, member : nextcord.Member, item, quantity):
+    async def giveitem(self, interaction : nextcord.Interaction, member : nextcord.Member, item, quantity):
         self.give_item(member, item, quantity=quantity)
         await interaction.response.send_message('done', ephemeral=True)
 

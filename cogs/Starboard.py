@@ -14,7 +14,7 @@ class Starboard(commands.Cog):
         self.data = self.datautil.load()
         self.db = sqlite3.connect('data/bot_data.db')
         cursor = self.db.cursor()
-        cursor.execute('CREATE TABLE IF NOT EXISTS starboard (message INTEGER, original_message INTEGER, stars SMALLINT)')
+        cursor.execute('CREATE TABLE IF NOT EXISTS starboard (message INTEGER, original_message INTEGER, channel_id INTEGER, stars SMALLINT)')
         cursor.close()
     
     async def update_stars(self, message, stars):
@@ -53,7 +53,7 @@ class Starboard(commands.Cog):
                     embed.set_footer(text=time.strftime("%m/%d/%Y %I:%M %p"))
                     starboard_channel = self.client.get_channel(1102065147046015099)
                     starboard_message = await starboard_channel.send(embed=embed)
-                    cursor.execute('INSERT INTO starboard (message, original_message, stars) VALUES (?, ?, ?)', (starboard_message.id, message.id, stars.count))
+                    cursor.execute('INSERT INTO starboard (message, original_message, channel_id, stars) VALUES (?, ?, ?, ?)', (starboard_message.id, message.id, payload.channel_id, stars.count))
                 self.db.commit()
                 cursor.close()
     
@@ -81,18 +81,36 @@ class Starboard(commands.Cog):
                 self.db.commit()
                 cursor.close()
     
-    def change_emoji(self, emoji : str):
-        newemoji = ''
-        if emoji.find('<') != -1:
-            newemoji = emoji
+    @nextcord.slash_command(guild_ids=[1093195040320389200])
+    async def changeminstars(self, interaction : nextcord.Interaction, stars : int):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
         else:
-            newemoji = f'\\u{hex(ord(emoji))[2:].zfill(4)}'
-        self.datautil.updateData({'starboard_emoji':newemoji})
-    
-    # @nextcord.slash_command(guild_ids=[1093195040320389200])
-    # async def getemoji(self, interaction : nextcord.Interaction, emoji):
-    #     self.change_emoji(emoji)
-    #     await interaction.response.send_message(str(emoji))
+            self.datautil.updateData({'starboard_min_reactions':stars})
+            self.data = self.datautil.load()
+            await interaction.response.send_message(f'Minimum Stars set to {stars} stars')
+
+    @nextcord.slash_command(guild_ids=[1093195040320389200])
+    async def starboard(self, interaction : nextcord.Interaction):
+        await interaction.response.defer()
+        cursor = self.db.cursor()
+        cursor.execute('SELECT * FROM starboard ORDER BY stars DESC LIMIT 10')
+        result = cursor.fetchall()
+        cursor.close()
+        description = ''
+        i = 1
+        max_length = 22
+        for sb_message, original, channel, stars in result:
+            message = await self.client.get_channel(int(channel)).fetch_message(int(original))
+            content = message.content.replace('\n', ' ')
+            if len(content) > max_length:
+                content = content[:max_length]+'...'
+            elif len(content) == 0:
+                content = 'Source'
+            description += f'{i}. [{content}]({message.jump_url}) - {message.author.mention} ⭐{stars}\n'
+            i += 1
+        embed = nextcord.Embed(description=description, color=nextcord.Colour(0xd4af37))
+        await interaction.followup.send(embed=embed)
 
     def __del__(self):
         self.db.close()
