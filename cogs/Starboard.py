@@ -96,21 +96,24 @@ class Starboard(commands.Cog):
         cursor = self.db.cursor()
         cursor.execute('SELECT * FROM starboard ORDER BY stars DESC LIMIT 10')
         result = cursor.fetchall()
-        cursor.close()
-        description = ''
-        i = 1
-        max_length = 22
-        for sb_message, original, channel, stars in result:
-            message = await self.client.get_channel(int(channel)).fetch_message(int(original))
-            content = message.content.replace('\n', ' ')
-            if len(content) > max_length:
-                content = content[:max_length]+'...'
-            elif len(content) == 0:
-                content = 'Source'
-            description += f'{i}. [{content}]({message.jump_url}) - {message.author.mention} ⭐{stars}\n'
-            i += 1
-        embed = nextcord.Embed(description=description, color=nextcord.Colour(0xd4af37))
-        await interaction.followup.send(embed=embed)
+        if len(result) == 0:
+            await interaction.followup.send('There are no messages on the starboard')
+        else:
+            cursor.close()
+            description = ''
+            i = 1
+            max_length = 22
+            for sb_message, original, channel, stars in result:
+                message = await self.client.get_channel(int(channel)).fetch_message(int(original))
+                content = message.content.replace('\n', ' ')
+                if len(content) > max_length:
+                    content = content[:max_length]+'...'
+                elif len(content) == 0:
+                    content = 'Source'
+                description += f'{i}. [{content}]({message.jump_url}) - {message.author.mention} ⭐{stars}\n'
+                i += 1
+            embed = nextcord.Embed(description=description, color=nextcord.Colour(0xd4af37))
+            await interaction.followup.send(embed=embed)
 
     def __del__(self):
         self.db.close()

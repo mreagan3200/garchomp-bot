@@ -365,8 +365,8 @@ class Level(commands.Cog):
             if user is not None:
                 leaderboard_list.append(r)
         await self.generate_leaderboard(leaderboard_list)
-        
-        embed = nextcord.Embed()
+        color = guild.get_member(self.client.user.id).color
+        embed = nextcord.Embed(color=color)
         file = nextcord.File(f'data/leaderboard/leaderboard.png', filename='leaderboard.png')  
         embed.set_image(url=f'attachment://leaderboard.png')
 

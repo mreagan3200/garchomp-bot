@@ -42,8 +42,8 @@ class Birthdays(commands.Cog):
         file = nextcord.File(f'{path}/{img}', filename=img)  
         embed.set_thumbnail(url=f'attachment://{img}')
 
-        birthday_channel = guild.get_channel(1100888377659756574)
-        await birthday_channel.send(file=file, embed=embed)
+        channel = guild.get_channel(1094286349550485644)
+        await channel.send(file=file, embed=embed)
     
     async def check_birthdays(self):
         year, month, day = str(date.today()).split('-')
