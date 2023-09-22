@@ -5,6 +5,7 @@ from typing import Optional
 from .ReactionRoles import type_roles
 from util.RolesUtil import *
 from util.DataUtil import *
+from .Shop import modify_string
 
 import sqlite3
 import numpy as np
@@ -13,6 +14,7 @@ from time import time
 import json
 from PIL import Image, ImageDraw, ImageFont
 import io
+from collections import defaultdict
 
 level_roles = ['Level 1', 'Level 10', 'Level 20', 'Level 30', 'Level 40', 'Level 50', 'Level 60', 
                'Level 70', 'Level 80', 'Level 90', 'Level 100']
@@ -25,7 +27,7 @@ class Level(commands.Cog):
         self.data = self.datautil.load()
         self.db = sqlite3.connect('data/bot_data.db')
         cursor = self.db.cursor()
-        cursor.execute('CREATE TABLE IF NOT EXISTS levels (user INTEGER, level INTEGER, total_xp INTEGER, base_hp INTEGER, base_atk INTEGER, base_def INTEGER, base_spa INTEGER, base_spd INTEGER, base_spe INTEGER, last_xp_s INTEGER)')
+        cursor.execute('CREATE TABLE IF NOT EXISTS levels (user INTEGER, level INTEGER, total_xp INTEGER, last_xp_s INTEGER)')
         cursor.execute('CREATE TABLE IF NOT EXISTS bag (user INTEGER, money INTEGER DEFAULT 3000, xp_candy_xs SMALLINT DEFAULT 0, xp_candy_s SMALLINT DEFAULT 0, xp_candy_m SMALLINT DEFAULT 0, xp_candy_l SMALLINT DEFAULT 0, xp_candy_xl SMALLINT DEFAULT 0, rare_candy SMALLINT DEFAULT 0)')
         cursor.close()
 
@@ -42,23 +44,27 @@ class Level(commands.Cog):
             cursor.close()
             return self.get_user_bag(member)
 
-    def give_item(self, member : nextcord.Member, item, quantity=1):
+    def give_item(self, member : nextcord.Member, items_dict : defaultdict):
         cursor = self.db.cursor()
-        cursor.execute(f'SELECT {item} FROM bag WHERE user = ?', (member.id,))
-        result = cursor.fetchone()
-        if result:
-            cursor.execute(f'UPDATE bag SET {item} = ? WHERE user = ?', (result[0]+int(quantity), member.id))
-        else:
-            cursor.execute(f'INSERT INTO bag (user, {item}) VALUES (?, ?)', (member.id, quantity))
+        for item,quantity in items_dict.items():
+            cursor.execute(f'SELECT {item} FROM bag WHERE user = ?', (member.id,))
+            result = cursor.fetchone()
+            if result:
+                cursor.execute(f'UPDATE bag SET {item} = ? WHERE user = ?', (result[0]+int(quantity), member.id))
+            else:
+                cursor.execute(f'INSERT INTO bag (user, {item}) VALUES (?, ?)', (member.id, int(quantity)))
         self.db.commit()
         cursor.close()
     
     async def use_item(self, member : nextcord.Member, item, quantity=1):
         cursor = self.db.cursor()
+        item = item.strip().lower().replace(' ', '_')
         try:
             cursor.execute(f'SELECT {item} from bag WHERE user = ?', (member.id,))
             q = int(cursor.fetchone()[0])
-            if quantity == 'all':
+            if quantity is None:
+                quantity = 1
+            elif quantity == 'all':
                 quantity = q
             else:
                 quantity = int(quantity)
@@ -74,10 +80,7 @@ class Level(commands.Cog):
                 return True
             elif item == 'rare_candy':
                 cursor.execute('SELECT level, total_xp from levels WHERE user = ?', (member.id,))
-                level, total_xp = cursor.fetchone()
-                if level + quantity > 100:
-                    cursor.close()
-                    return False
+                level, total_xp = cursor.fetchone() 
                 xp = (level+quantity)**3 - total_xp
                 cursor.execute(f'UPDATE bag SET {item} = ? WHERE user = ?', (q-quantity, member.id))
                 self.db.commit()
@@ -88,6 +91,36 @@ class Level(commands.Cog):
             print(e)
             cursor.close()
             return False
+    
+    def get_levelup_rewards(self, prevLevel, currLevel):
+        rewards = defaultdict(int)
+        for level in range(prevLevel, currLevel):
+            level += 1
+            rewards['money'] += level*100
+            if level % 10 == 0:
+                candy = None
+                if level <= 10:
+                    candy = 'xp_candy_s'
+                elif level <= 30:
+                    candy = 'xp_candy_m'
+                elif level <= 50:
+                    candy = 'xp_candy_l'
+                else:
+                    candy = 'xp_candy_xl'
+                rewards[candy] += 5
+                rewards['rare_candy'] += 1
+            if level % 5 == 0:
+                if level >= 0:
+                    rewards['xp_candy_xs'] += 2
+                if level >= 30:
+                    rewards['xp_candy_s'] += 2
+                if level >= 50:
+                    rewards['xp_candy_m'] += 2
+                if level >= 70:
+                    rewards['xp_candy_l'] += 2
+                if level > 70:
+                    rewards['xp_candy_xl'] += 2
+        return rewards
     
     async def update_level_role(self, member : nextcord.Member):
         current_role = None
@@ -117,45 +150,17 @@ class Level(commands.Cog):
                 role = nextcord.utils.get(guild.roles, name=level_roles[new_role_index])
                 await add_role(member, role)
                 await remove_role(member, current_role)
-    
-    def generate_base_stats(self, bst=600, minimum=60):
-        baseStats = [minimum]*6
-        maximum = bst//4
-        bst = (bst - minimum*6)//10
-        l = list(range(6))
-        while bst > 0:
-            choice = random.choice(l)
-            baseStats[choice] += 10
-            if baseStats[choice] >= maximum:
-                l.remove(choice)
-            bst -= 1
-        return baseStats
-    
-    def get_stats(self, base_stats : list, level : int):
-        new_stats = ['']*6
-        new_stats[0] = (base_stats[0]*2*level)//100 + level + 10
-        for i in range(1, 6):
-            new_stats[i] = (base_stats[i]*2*level)//100 + 5
-        return tuple(new_stats)
-    
-    def get_level_up_stats(self, base_stats : list, old_level : int, new_level : int):
-        stats = ['']*6
-        old_stats = self.get_stats(base_stats, old_level)
-        new_stats = self.get_stats(base_stats, new_level)
-        for i in range(6):
-            stats[i] = f'{new_stats[i]}(+{new_stats[i]-old_stats[i]})'
-        return tuple(stats)
 
     async def init_user_level(self, member : nextcord.Member):
         cursor = self.db.cursor()
         cursor.execute('SELECT * FROM levels WHERE user = ?', (member.id,))
         entry = cursor.fetchone()
         if entry is not None:
+            await self.update_level_role(member)
             cursor.close()
             return False
         else:
-            baseStats = self.generate_base_stats()
-            cursor.execute('INSERT INTO levels (user, level, total_xp, base_hp, base_atk, base_def, base_spa, base_spd, base_spe, last_xp_s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (member.id, 1, 0, baseStats[0], baseStats[1], baseStats[2], baseStats[3], baseStats[4], baseStats[5], int(time())))
+            cursor.execute('INSERT INTO levels (user, level, total_xp, last_xp_s) VALUES (?, ?, ?, ?)', (member.id, 1, 0, int(time())))
             self.db.commit()
             cursor.close()
             await self.update_level_role(member)
@@ -165,23 +170,24 @@ class Level(commands.Cog):
     async def on_member_join(self, member : nextcord.Member):
         await self.init_user_level(member)
     
-    async def sendLevelUpMessage(self, user : nextcord.Member, oldLevel, newLevel):
+    async def sendLevelUpMessage(self, user : nextcord.Member, oldLevel, newLevel, rewards):
         bot_commands = self.client.get_channel(1094723044888547448)
-        embed = nextcord.Embed(title=f'{user.display_name} leveled up to level {newLevel}!',
-                                color=user.color)
+        emote_guild = self.client.get_guild(self.data.get('emote_server_id'))
+        description = 'Rewards'
+        for k,v in rewards.items():
+            description += '\n'
+            if k == 'money':
+                description += f'${v}'
+            else:
+                emoji = nextcord.utils.get(emote_guild.emojis, name=k)
+                item = modify_string(k)
+                if emoji:
+                    description += f'{emoji} x{v}\t`{item}`'
+                else:
+                    description += f'{item} x{v}'
+        embed = nextcord.Embed(title=f'{user.display_name} leveled up to level {newLevel:.0f}!',
+                                description=description, color=user.color)
         embed.set_thumbnail(url=user.display_avatar.url)
-        if self.data.get('show_stats'):
-            cursor = self.db.cursor()
-            cursor.execute('SELECT base_hp, base_atk, base_def, base_spa, base_spd, base_spe FROM levels WHERE user = ?', (user.id,))
-            base_stats = cursor.fetchone()
-            p_hp, p_atk, p_def, p_spa, p_spd, p_spe = self.get_level_up_stats(list(base_stats), oldLevel, newLevel)
-            embed.add_field(name='HP', value=p_hp, inline=True)
-            embed.add_field(name='ATK', value=p_atk, inline=True)
-            embed.add_field(name='DEF', value=p_def, inline=True)
-            embed.add_field(name='SPA', value=p_spa, inline=True)
-            embed.add_field(name='SPD', value=p_spd, inline=True)
-            embed.add_field(name='SPE', value=p_spe, inline=True)
-            cursor.close()
         await bot_commands.send(embed=embed)
 
     async def addXP(self, user : nextcord.Member, xp=0, message=False):
@@ -200,8 +206,8 @@ class Level(commands.Cog):
             current_time = int(time())
             xp = self.getXPToAdd(last_xp_s, current_time)
         if xp > 0:
-            totalxp = min(info_tuple[1] + xp, 1000000)
-            newlevel = np.floor(np.cbrt(totalxp))
+            totalxp = info_tuple[1] + xp
+            newlevel = int(np.floor(np.cbrt(totalxp)))
             if message:
                 cursor.execute('UPDATE levels SET level = ?, total_xp = ?, last_xp_s = ? WHERE user = ?', (newlevel, totalxp, current_time, user.id))
             else:
@@ -209,14 +215,15 @@ class Level(commands.Cog):
             self.db.commit()
             cursor.close()
             if newlevel > info_tuple[0]:
+                rewards = self.get_levelup_rewards(info_tuple[0], newlevel)
+                self.give_item(user, rewards)
                 await self.update_level_role(user)
-                await self.sendLevelUpMessage(user, info_tuple[0], newlevel)
+                await self.sendLevelUpMessage(user, info_tuple[0], newlevel, rewards)
         else:
             cursor.close()
     
     def getXPToAdd(self, last_xp_s : int, current_time : int):
         time_elapsed = current_time - last_xp_s
-        print(time_elapsed)
         if time_elapsed < 300:
             return time_elapsed//60
         else:
@@ -271,19 +278,20 @@ class Level(commands.Cog):
             draw.text((520, (i*75) + (70-h)//2), level_text, fill='#5A6A9C', font=font)
         image.save(image_path)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='init', description='init level')
-    async def init(self, interaction : nextcord.Interaction, user : nextcord.Member):
+    @nextcord.slash_command(guild_ids=[1093195040320389200], name='init', description='Initialize a user\'s xp and reset level role.')
+    async def init(self, interaction : nextcord.Interaction, user : Optional[nextcord.Member] = nextcord.SlashOption(required=False, description='member to initialize. member is self if omitted.')):
+        if user is None:
+            user = interaction.user
+        elif not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message('You are not authorized to initialize other users', ephemeral=True)
+            return
         if await self.init_user_level(user):
-            await interaction.response.send_message('execution successful')
+            await interaction.response.send_message(f'{user.name} initialized', ephemeral=True)
         else:
-            await interaction.response.send_message('execution failed')
+            await interaction.response.send_message(f'{user.name} is already initialized', ephemeral=True)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='summary', description='Generate a summary of a user\'s stats')
-    async def info(self, interaction : nextcord.Interaction, user : Optional[nextcord.Member] = nextcord.SlashOption(required=False)):
-        """
-        user: Member
-            member to generate stats. member is self if omitted.
-        """
+    @nextcord.slash_command(guild_ids=[1093195040320389200], name='summary', description='Generate a summary of a user\'s stats.')
+    async def info(self, interaction : nextcord.Interaction, user : Optional[nextcord.Member] = nextcord.SlashOption(required=False, description='member to generate stats. member is self if omitted.')):
         if user is None:
             user = interaction.user
         cursor = self.db.cursor()
@@ -296,22 +304,12 @@ class Level(commands.Cog):
         xp = info_tuple[1]
         xp_to_next = (level+1)**3 - xp
         description = f'Exp. Points: {xp}\n'
-        description += f'To Next Level: {xp_to_next}' if level < 100 else 'MAX LEVEL'
+        description += f'To Next Level: {xp_to_next}'
         embed = nextcord.Embed(title=f'Level {level}', 
                             description=description, 
                             color=user.color)
         embed.set_thumbnail(url=user.display_avatar.url)
         embed.set_author(name=user.display_name)
-        if self.data.get('show_stats'):
-            cursor.execute('SELECT base_hp, base_atk, base_def, base_spa, base_spd, base_spe FROM levels WHERE user = ?', (user.id,))
-            base_stats = cursor.fetchone()
-            p_hp, p_atk, p_def, p_spa, p_spd, p_spe = self.get_stats(list(base_stats), level)
-            embed.add_field(name='HP', value=p_hp, inline=True)
-            embed.add_field(name='ATK', value=p_atk, inline=True)
-            embed.add_field(name='DEF', value=p_def, inline=True)
-            embed.add_field(name='SPA', value=p_spa, inline=True)
-            embed.add_field(name='SPD', value=p_spd, inline=True)
-            embed.add_field(name='SPE', value=p_spe, inline=True)
         cursor.close()
         await interaction.response.send_message(embed=embed)
 
@@ -326,6 +324,7 @@ class Level(commands.Cog):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
             return
+        await administrator_command_executed(interaction)
         cursor = self.db.cursor()
         level = max(np.floor(np.cbrt(xp)), 1)
         await self.init_user_level(member)
@@ -337,7 +336,7 @@ class Level(commands.Cog):
         self.db.commit()
         cursor.close()
         await self.update_level_role(member)
-        await interaction.response.send_message('done')
+        await interaction.response.send_message('done', ephemeral=True)
     
     @nextcord.slash_command(guild_ids=[1093195040320389200], name='addxp', description='Add to a user\'s xp. Must be an administrator to use.')
     async def addxpcommand(self, interaction : nextcord.Interaction, member : nextcord.Member, xp : int):
@@ -350,10 +349,11 @@ class Level(commands.Cog):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
             return
+        await administrator_command_executed(interaction)
         await self.addXP(member, xp)
-        await interaction.response.send_message('done')
+        await interaction.response.send_message('done', ephemeral=True)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='leaderboard', description='Generate a leaderboard of the top 10 highest leveled users')
+    @nextcord.slash_command(guild_ids=[1093195040320389200], name='leaderboard', description='Generate a leaderboard of the top 10 highest leveled users.')
     async def leaderboard(self, interaction : nextcord.Interaction):
         cursor = self.db.cursor()
         cursor.execute('SELECT user, level FROM levels WHERE user != ? ORDER BY total_xp DESC ', (1093965324988194886,))
@@ -365,6 +365,7 @@ class Level(commands.Cog):
             if user is not None:
                 leaderboard_list.append(r)
         await self.generate_leaderboard(leaderboard_list)
+        guild = self.client.get_guild(1093195040320389200)
         color = guild.get_member(self.client.user.id).color
         embed = nextcord.Embed(color=color)
         file = nextcord.File(f'data/leaderboard/leaderboard.png', filename='leaderboard.png')  
@@ -372,20 +373,27 @@ class Level(commands.Cog):
 
         await interaction.response.send_message(file=file, embed=embed)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200])
-    async def giveitem(self, interaction : nextcord.Interaction, member : nextcord.Member, item, quantity):
-        self.give_item(member, item, quantity=quantity)
+    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Give item to a user. Must be an administrator to use.')
+    async def giveitem(self, interaction : nextcord.Interaction, member : nextcord.Member, item : str, quantity : int):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
+            return
+        await administrator_command_executed(interaction)
+        item = item.strip().lower().replace(' ', '_')
+        items_dict = defaultdict(int)
+        items_dict[item] = quantity
+        self.give_item(member, items_dict)
         await interaction.response.send_message('done', ephemeral=True)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200])
-    async def useitem(self, interaction : nextcord.Interaction, item, quantity):
+    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Use an item from the bag.')
+    async def useitem(self, interaction : nextcord.Interaction, item : Optional[str] = nextcord.SlashOption(required=True, description='item to use'), quantity : Optional[str] = nextcord.SlashOption(required=False, description='amount to use')):
         success = await self.use_item(interaction.user, item, quantity=quantity)
         if success:
             await interaction.response.send_message('done', ephemeral=True)
         else:
             await interaction.response.send_message('failed', ephemeral=True)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200])
+    @nextcord.slash_command(guild_ids=[1093195040320389200], name='bag', description='Generate bag contents.')
     async def bag(self, interaction : nextcord.Interaction):
         bag_contents = self.get_user_bag(interaction.user)
         emote_guild = self.client.get_guild(self.data.get('emote_server_id'))
@@ -402,6 +410,7 @@ class Level(commands.Cog):
             else:
                 if bag_contents[i] > 0:
                     emoji = nextcord.utils.get(emote_guild.emojis, name=item)
+                    item = modify_string(item)
                     if emoji:
                         description += f'{emoji} x{bag_contents[i]}\t`{item}`\n'
                     else:

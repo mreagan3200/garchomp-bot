@@ -6,6 +6,7 @@ import sqlite3
 from datetime import timezone, datetime
 
 from util.DataUtil import *
+from util.RolesUtil import administrator_command_executed
 
 class Starboard(commands.Cog):
     def __init__(self, client : nextcord.Client):
@@ -81,16 +82,17 @@ class Starboard(commands.Cog):
                 self.db.commit()
                 cursor.close()
     
-    @nextcord.slash_command(guild_ids=[1093195040320389200])
+    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Set minimum stars for starboard. Must be an administrator to use.')
     async def changeminstars(self, interaction : nextcord.Interaction, stars : int):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
-        else:
-            self.datautil.updateData({'starboard_min_reactions':stars})
-            self.data = self.datautil.load()
-            await interaction.response.send_message(f'Minimum Stars set to {stars} stars')
+            return
+        await administrator_command_executed(interaction)
+        self.datautil.updateData({'starboard_min_reactions':stars})
+        self.data = self.datautil.load()
+        await interaction.response.send_message(f'Minimum Stars set to {stars} stars')
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200])
+    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Generate top starboard messages.')
     async def starboard(self, interaction : nextcord.Interaction):
         await interaction.response.defer()
         cursor = self.db.cursor()

@@ -52,8 +52,7 @@ class ReactionRoles(commands.Cog):
                 return
         elif payload.message_id == self.data.get('react_message_ids')[2]:
             await message.remove_reaction(payload.emoji, payload.member)
-            await ban(payload.member)
-            await unban(payload.member)
+            await kick(payload.member)
             return
         await message.remove_reaction(payload.emoji, payload.member)
 
@@ -75,12 +74,13 @@ class ReactionRoles(commands.Cog):
                 role = nextcord.utils.get(guild.roles, name=role_name)
                 await remove_role(member, role)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='resetreactionroles', description='Reset the reaction role messages. Must be an administrator to use')
+    @nextcord.slash_command(guild_ids=[1093195040320389200], name='resetreactionroles', description='Reset the reaction role messages. Must be an administrator to use.')
     async def resetreactionroles(self, interaction : nextcord.Interaction):
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
             return
+        await administrator_command_executed(interaction)
         roles_channel = interaction.guild.get_channel(1093916970644156419)
         guild = interaction.guild
         emote_guild = self.client.get_guild(self.data.get('emote_server_id'))
