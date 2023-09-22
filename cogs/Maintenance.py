@@ -72,6 +72,11 @@ class Mainenance(commands.Cog):
             embed.set_author(name=before.author.name, icon_url=before.author.display_avatar.url)
             await self.client.get_channel(1093921362961252372).send(embed=embed)
 
+    @commands.Cog.listener()
+    async def on_message(self, message : nextcord.Message):
+        if message.author.id == 1149200790779592704:
+            print('commit detected')
+
     async def dump_log_files(self):
         logs = os.listdir('./logs')
         mod_logs = self.client.get_guild(1093195040320389200).get_channel(1093921362961252372)
