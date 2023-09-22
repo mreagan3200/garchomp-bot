@@ -78,6 +78,7 @@ class Mainenance(commands.Cog):
         if message.author.id == 1149200790779592704:
             try:
                 subprocess.Popen('python Update.py', shell=True)
+                print('send message')
                 await self.client.get_channel(1093921362961252372).send('Update complete')
             except subprocess.CalledProcessError as e:
                 if e.returncode != 15:
