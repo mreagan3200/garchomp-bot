@@ -77,5 +77,4 @@ if __name__ == '__main__':
         if client:
             print('closing client')
             loop.run_until_complete(shared.client.close())
-    pass
     loop.close()
