@@ -77,7 +77,7 @@ class Mainenance(commands.Cog):
     async def on_message(self, message : nextcord.Message):
         if message.author.id == 1149200790779592704:
             try:
-                subprocess.check_call('python Update.py', shell=True)
+                subprocess.Popen('python Update.py', shell=True)
                 await self.client.get_channel(1093921362961252372).send('Update complete')
             except subprocess.CalledProcessError as e:
                 if e.returncode != 15:
