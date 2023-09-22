@@ -1,4 +1,5 @@
 import nextcord
+import subprocess
 from nextcord.ext import commands
 
 import os
@@ -75,7 +76,12 @@ class Mainenance(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message : nextcord.Message):
         if message.author.id == 1149200790779592704:
-            print('commit detected')
+            try:
+                subprocess.check_call('python Update.py', shell=True)
+                await self.client.get_channel(1093921362961252372).send('Update complete')
+            except subprocess.CalledProcessError as e:
+                if e.returncode != 15:
+                    print(f"Error restarting the bot: {e}")
 
     async def dump_log_files(self):
         logs = os.listdir('./logs')
