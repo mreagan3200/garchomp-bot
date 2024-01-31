@@ -1,23 +1,61 @@
 import nextcord
 from nextcord.ext import commands
 from dotenv import load_dotenv
+from typing import Optional
 
 import os
-import signal
 import asyncio
-import sys
-
 import shared
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 if shared.client is None:
     i = nextcord.Intents.all()
-    shared.client = commands.Bot(intents=i, activity=nextcord.Game(name='VGC'))
+    shared.client = commands.Bot(intents=i)
 
 @shared.client.event
 async def on_ready():
     print(f'Logged in as {shared.client.user}')
+
+@shared.client.slash_command(guild_ids=[1093195040320389200], description='Secret commands. Must be an administrator to use.')
+async def command(interaction : nextcord.Interaction, command : str, args : Optional[str] = nextcord.SlashOption(required=False), member : Optional[nextcord.Member] = nextcord.SlashOption(required=False)):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
+        return
+    command = command.lower()
+    args = args.lower()
+    message = f'Invalid args: {str(args)}'
+    args = [] if args is None else args.split(' ')
+    match command:
+        case 'addshopitem':
+            if len(args) == 4:
+                message = await getattr(shared.client.get_cog('Shop'), 'addshopitem')(*args)
+        case 'editshop':
+            if len(args) in [3,4]:
+                message = await getattr(shared.client.get_cog('Shop'), 'editshop')(*args)
+        case 'removeshopitem':
+            if len(args) == 2:
+                message = await getattr(shared.client.get_cog('Shop'), 'removeshopitem')(*args)
+        case 'addxp':
+            if len(args) == 1 and member is not None:
+                message = await getattr(shared.client.get_cog('Level'), 'addxpcommand')(member, int(args[0]))
+        case 'setxp':
+            if len(args) == 1 and member is not None:
+                message = await getattr(shared.client.get_cog('Level'), 'setxp')(member, int(args[0]))
+        case 'changeminstars':
+            if len(args) == 1:
+                message = await getattr(shared.client.get_cog('Starboard'), 'changeminstars')(int(args[0]))
+        case 'resetreactionroles':
+            interaction.response.defer()
+            await getattr(shared.client.get_cog('ReactionRoles'), 'resetreactionroles')()
+            interaction.followup.send('done', ephemeral=True)
+            return
+        case 'restorebackup':
+            message = await getattr(shared.client.get_cog('Maintenance'), 'restore_backup')()
+        case _:
+            message = f'Invalid command: {command}'
+    await interaction.response.send_message(message, ephemeral=True)
+
 
 async def invoke_cog(cogName, methodName):
     cog = shared.client.get_cog(cogName)
@@ -69,7 +107,8 @@ if __name__ == '__main__':
     initial_extensions = []
     loop = asyncio.get_event_loop()
     try:
-        asyncio.run(main())
+        loop.create_task(main())
+        loop.run_forever()
     except KeyboardInterrupt:
         print("Received Ctrl+C. Exiting gracefully...")
     finally:

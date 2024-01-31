@@ -5,8 +5,9 @@ from nextcord.ext import commands
 import os
 import io
 import datetime
+import shutil
 
-class Mainenance(commands.Cog):
+class Maintenance(commands.Cog):
     def __init__(self, client : nextcord.Client):
         self.client = client
     
@@ -78,8 +79,6 @@ class Mainenance(commands.Cog):
         if message.author.id == 1149200790779592704:
             try:
                 subprocess.Popen('python Update.py', shell=True)
-                print('send message')
-                await self.client.get_channel(1093921362961252372).send('Update complete')
             except subprocess.CalledProcessError as e:
                 if e.returncode != 15:
                     print(f"Error restarting the bot: {e}")
@@ -96,6 +95,16 @@ class Mainenance(commands.Cog):
             os.remove(f'logs/{fileName}')
         if len(logs) == 0:
             await mod_logs.send('No errors or warnings to report for this week')
+    
+    async def create_backup(self):
+        shutil.copy('data/bot_data.db', 'data/backup_data.db')
+    
+    async def restore_backup(self):
+        if os.path.isfile('data/backup_data.db'):
+            shutil.copy('data/backup_data.db', 'data/bot_data.db')
+            return 'Backup restored'
+        else:
+            return 'No backup'
 
 def setup(client : nextcord.Client):
-    client.add_cog(Mainenance(client))
+    client.add_cog(Maintenance(client))

@@ -1,12 +1,10 @@
 import nextcord
 from nextcord.ext import commands
 
-import json
 import sqlite3
-from datetime import timezone, datetime
+from datetime import datetime
 
 from util.DataUtil import *
-from util.RolesUtil import administrator_command_executed
 
 class Starboard(commands.Cog):
     def __init__(self, client : nextcord.Client):
@@ -14,9 +12,8 @@ class Starboard(commands.Cog):
         self.datautil = DataUtil('data/data.json')
         self.data = self.datautil.load()
         self.db = sqlite3.connect('data/bot_data.db')
-        cursor = self.db.cursor()
-        cursor.execute('CREATE TABLE IF NOT EXISTS starboard (message INTEGER, original_message INTEGER, channel_id INTEGER, stars SMALLINT)')
-        cursor.close()
+        self.cursor = self.db.cursor()
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS starboard (message INTEGER, original_message INTEGER, channel_id INTEGER, stars SMALLINT)')
     
     async def update_stars(self, message, stars):
         starboard_message = await self.client.get_channel(1102065147046015099).fetch_message(message)
@@ -36,12 +33,11 @@ class Starboard(commands.Cog):
             emoji = str(payload.emoji) if str(payload.emoji).find('<') == -1 else payload.emoji
             stars = nextcord.utils.get(message.reactions, emoji=emoji)
             if stars.count >= self.data['starboard_min_reactions']:
-                cursor = self.db.cursor()
-                cursor.execute('SELECT message FROM starboard WHERE original_message = ?', (message.id,))
-                starboard_entry = cursor.fetchone()
+                self.cursor.execute('SELECT message FROM starboard WHERE original_message = ?', (message.id,))
+                starboard_entry = self.cursor.fetchone()
                 if starboard_entry:
                     await self.update_stars(starboard_entry[0], stars.count)
-                    cursor.execute('UPDATE starboard SET stars = ? WHERE message = ?', (stars.count, starboard_entry[0]))
+                    self.cursor.execute('UPDATE starboard SET stars = ? WHERE message = ?', (stars.count, starboard_entry[0]))
                 else:
                     embed = nextcord.Embed(description=f'{message.content}\n\n[**Source**]({message.jump_url})',
                                             color=message.author.color)
@@ -54,9 +50,8 @@ class Starboard(commands.Cog):
                     embed.set_footer(text=time.strftime("%m/%d/%Y %I:%M %p"))
                     starboard_channel = self.client.get_channel(1102065147046015099)
                     starboard_message = await starboard_channel.send(embed=embed)
-                    cursor.execute('INSERT INTO starboard (message, original_message, channel_id, stars) VALUES (?, ?, ?, ?)', (starboard_message.id, message.id, payload.channel_id, stars.count))
+                    self.cursor.execute('INSERT INTO starboard (message, original_message, channel_id, stars) VALUES (?, ?, ?, ?)', (starboard_message.id, message.id, payload.channel_id, stars.count))
                 self.db.commit()
-                cursor.close()
     
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload : nextcord.RawReactionActionEvent):
@@ -67,41 +62,32 @@ class Starboard(commands.Cog):
             message = await self.client.get_channel(payload.channel_id).fetch_message(payload.message_id)
             emoji = str(payload.emoji) if str(payload.emoji).find('<') == -1 else payload.emoji
             stars = nextcord.utils.get(message.reactions, emoji=emoji)
-            cursor = self.db.cursor()
-            cursor.execute('SELECT message FROM starboard WHERE original_message = ?', (message.id,))
-            starboard_entry = cursor.fetchone()
+            self.cursor.execute('SELECT message FROM starboard WHERE original_message = ?', (message.id,))
+            starboard_entry = self.cursor.fetchone()
             if starboard_entry:
                 stars = stars.count if stars else 0
                 if stars == 0:
                     starboard_message = await self.client.get_channel(1102065147046015099).fetch_message(starboard_entry[0])
-                    cursor.execute('DELETE FROM starboard WHERE original_message = ?', (message.id,))
+                    self.cursor.execute('DELETE FROM starboard WHERE original_message = ?', (message.id,))
                     await starboard_message.delete()
                 else:
                     await self.update_stars(starboard_entry[0], stars)
-                    cursor.execute('UPDATE starboard SET stars = ? WHERE message = ?', (stars, starboard_entry[0]))
+                    self.cursor.execute('UPDATE starboard SET stars = ? WHERE message = ?', (stars, starboard_entry[0]))
                 self.db.commit()
-                cursor.close()
     
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Set minimum stars for starboard. Must be an administrator to use.')
-    async def changeminstars(self, interaction : nextcord.Interaction, stars : int):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
-            return
-        await administrator_command_executed(interaction)
+    async def changeminstars(self, stars : int):
         self.datautil.updateData({'starboard_min_reactions':stars})
         self.data = self.datautil.load()
-        await interaction.response.send_message(f'Minimum Stars set to {stars} stars')
+        return f'Minimum stars set to {stars} stars'
 
     @nextcord.slash_command(guild_ids=[1093195040320389200], description='Generate top starboard messages.')
     async def starboard(self, interaction : nextcord.Interaction):
         await interaction.response.defer()
-        cursor = self.db.cursor()
-        cursor.execute('SELECT * FROM starboard ORDER BY stars DESC LIMIT 10')
-        result = cursor.fetchall()
+        self.cursor.execute('SELECT * FROM starboard ORDER BY stars DESC LIMIT 10')
+        result = self.cursor.fetchall()
         if len(result) == 0:
             await interaction.followup.send('There are no messages on the starboard')
         else:
-            cursor.close()
             description = ''
             i = 1
             max_length = 22
@@ -118,6 +104,7 @@ class Starboard(commands.Cog):
             await interaction.followup.send(embed=embed)
 
     def __del__(self):
+        self.cursor.close()
         self.db.close()
 
 def setup(client : nextcord.Client):

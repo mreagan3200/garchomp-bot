@@ -1,52 +1,57 @@
 import nextcord
 from nextcord.ext import commands
 from typing import Optional
-
-import json
 import sqlite3
 
 from util.DataUtil import *
-from util.RolesUtil import administrator_command_executed
+from util.RolesUtil import *
 import shared
 
-'''amulet coin, exp share, '''
+''' 
+Pay Day, Lock On, Trick
+'''
+
+class DBConnection:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(DBConnection, cls).__new__(cls)
+            cls._instance.db = sqlite3.connect('data/bot_data.db')
+        return cls._instance
+
+    def __del__(self):
+        self.db.close()
 
 def shopEmbed(pageNum=1):
-    data = DataUtil('data/data.json').load()
+    conn = DBConnection()
     description = ''
     client = shared.client
-    inventory = data.get('shop_inventory')
-    emote_server = data.get('emote_server_id')
-    emote_guild = client.get_guild(emote_server)
-    page = inventory.get(f'{pageNum}')
-    title = page.get('title')
-    if page:
-        for item in page.get('items'):
-            name = item.get('name')
-            price = item.get('price')
-            desc = item.get('desc')
-            if title == 'TMs':
-                emoji = nextcord.utils.get(emote_guild.emojis, name='tm')
-            else:
-                emoji = nextcord.utils.get(emote_guild.emojis, name=name)
-            if emoji:
-                description += f'${price} {emoji} `{modify_string(name)}` {desc}\n'
-            else:
-                description += f'${price} `{modify_string(name)}` {desc} \n'
-    embed = nextcord.Embed(title=title, description=description, color=nextcord.Colour(int(page.get('color')[1:], 16)))
-    embed.set_footer(text=f'{pageNum}/{len(inventory)}')
-    return embed
-
-def modify_string(input_str):
-    words = input_str.split('_')
-    modified_words = []
-    for word in words:
-        if word.lower() in ('xp', 'xs', 'xl'):
-            modified_words.append(word.upper())
+    emote_guild = client.get_guild(emote_server_id)
+    cursor = conn.db.cursor()
+    cursor.execute('SELECT title, color FROM shopdata WHERE page = ?', (pageNum,))
+    title, color = cursor.fetchone()
+    cursor.execute('SELECT COUNT(*) FROM shopdata')
+    length = cursor.fetchone()[0]
+    if title.startswith('XP'):
+        cursor.execute('SELECT name, price, desc FROM shop WHERE page = ? ORDER BY price ASC', (pageNum,))
+    else:
+        cursor.execute('SELECT name, price, desc FROM shop WHERE page = ? ORDER BY name ASC', (pageNum,))
+    for row in cursor.fetchall():
+        name, price, desc = row
+        if title == 'TMs':
+            emoji = nextcord.utils.get(emote_guild.emojis, name='tm')
         else:
-            modified_words.append(word.capitalize())
-    result_str = ' '.join(modified_words)
-    return result_str
+            emoji = nextcord.utils.get(emote_guild.emojis, name=name.lower().replace(' ', '_'))
+        if emoji:
+            description += f'${price} {emoji} `{format_item(name)}` {desc}\n'
+        else:
+            description += f'${price} `{format_item(name)}` {desc} \n'
+    cursor.close()
+    color = int(color.hex(), 16) if type(color) == bytes else int(color)
+    embed = nextcord.Embed(title=title, description=description, color=nextcord.Colour(color))
+    embed.set_footer(text=f'{pageNum}/{length}')
+    return embed
 
 class ShopUI(nextcord.ui.View):
     def __init__(self):
@@ -90,7 +95,19 @@ class Shop(commands.Cog):
         self.client = client
         self.datautil = DataUtil('data/data.json')
         self.data = self.datautil.load()
-        self.db = sqlite3.connect('data/bot_data.db')
+        conn = DBConnection()
+        self.db = conn.db
+        self.cursor = self.db.cursor()
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS shop (name VARCHAR(30) UNIQUE, price SMALLINT, desc VARCHAR(60), page TINYINT)')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS shopdata (page TINYINT, title VARCHAR(30), color BINARY(3))')
+    
+    def get_item_and_price(self, item_name):
+        item_name = normalize_item(item_name)
+        self.cursor.execute('SELECT name, price FROM shop')
+        for row in self.cursor.fetchall():
+            if normalize_item(row[0]) == item_name:
+                return row
+        return None, None
 
     @nextcord.slash_command(guild_ids=[1093195040320389200], description='View shop items.')
     async def shop(self, interaction : nextcord.Interaction):
@@ -98,76 +115,52 @@ class Shop(commands.Cog):
         embed = shopEmbed()
         await interaction.response.send_message(embed=embed, view=ui)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Add an item to the shop. Must be an administrator to use.')
-    async def addshopitem(self, interaction : nextcord.Interaction, name, price, desc, page):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
-            return
-        await administrator_command_executed(interaction)
-        name = name.strip().lower().replace(' ', '_')
-        self.data = self.datautil.load()
-        shop_inventory = self.data.get('shop_inventory')
-        if not shop_inventory:
-            shop_inventory = {}
-        if not shop_inventory.get(page):
-            shop_inventory[page] = {'items':[], 'title':'', 'color':'#000000'}
-        shop_inventory[page]['items'].append({'name':name, 'price':price, 'desc':desc})
-        self.datautil.updateData({'shop_inventory':shop_inventory})
-        await interaction.response.send_message(f'{name} added to page {page}', ephemeral=True)
+    async def addshopitem(self, name, price, desc, page):
+        message = ''
+        name = formalize_item(name)
+        try:
+            self.cursor.execute('INSERT INTO shop (name, price, desc, page) VALUES (?, ?, ?, ?)', (name, price, desc, page))
+            self.cursor.execute('SELECT COUNT(*) FROM shopdata WHERE page = ?', (page,))
+            if self.cursor.fetchone()[0] == 0:
+                self.cursor.execute('INSERT INTO shopdata (page, title, color) VALUES (?, ?, ?)', (page, 'title', 0))
+            message = f'{format_item(name)} added to page {page}'
+        except sqlite3.IntegrityError:
+            message = f'{format_item(name)} already exists'
+        finally:
+            update_database(self.db)
+        return message
     
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Delete an item from the shop. Must be an administrator to use.')
-    async def removeshopitem(self, interaction : nextcord.Interaction, name, page):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
-            return
-        await administrator_command_executed(interaction)
-        self.data = self.datautil.load()
-        shop_inventory = self.data.get('shop_inventory')
-        if not shop_inventory or not shop_inventory.get(page):
-            await interaction.response.send_message('Invalid request', ephemeral=True)
-            return
-        name = name.strip().lower().replace(' ', '_')
-        shop_page = shop_inventory.get(page)
-        updated_list = [item for item in shop_page.get('items') if item.get('name').lower().replace(' ', '_') != name]
-        if len(updated_list) == 0:
-            del shop_inventory[page]
+    async def removeshopitem(self, name, page):
+        message = ''
+        name = formalize_item(name)
+        self.cursor.execute('DELETE FROM shop WHERE name = ? AND page = ?', (name, page))
+        if self.cursor.rowcount:
+            self.cursor.execute('SELECT COUNT(*) FROM shop WHERE page = ?', (page,))
+            if self.cursor.fetchone()[0] == 0:
+                self.cursor.execute('DELETE FROM shopdata WHERE page = ?', (page,))
+            message = f'{format_item(name)} removed from page {page}'
         else:
-            shop_page['items'] = updated_list
-        self.datautil.updateData({'shop_inventory':shop_inventory})
-        await interaction.response.send_message(f'{name} removed from page {page}', ephemeral=True)
+            message = f'{format_item(name)} not found on page {page}'
+        update_database(self.db)
+        return message
     
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Edit the shop. Must be an administrator to use.')
-    async def editshop(self, interaction : nextcord.Interaction, key, value, page, name : Optional[str] = nextcord.SlashOption(required=False)):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
-            return
-        await administrator_command_executed(interaction)
-        self.data = self.datautil.load()
-        shop_inventory = self.data.get('shop_inventory')
-        if not shop_inventory or not shop_inventory.get(page):
-            await interaction.response.send_message('Invalid request', ephemeral=True)
-            return
-        key = key.lower()
-        if key in ('title', 'color'):
-            shop_inventory.get(page)[key] = value
+    async def editshop(self, key, value, page, name=None):
+        if key == 'title':
+            self.cursor.execute(f'UPDATE shopdata SET title = ? WHERE page = ?', (value, page))
+        elif key == 'color':
+            self.cursor.execute(f'UPDATE shopdata SET color = UNHEX(?) WHERE page = ?', (value, page))
         elif key in ('name', 'price', 'desc'):
             if name is None:
-                await interaction.response.send_message('Invalid request', ephemeral=True)
-                return
-            name = name.strip().lower().replace(' ', '_')
-            found = False
-            for item in shop_inventory.get(page).get('items'):
-                if item.get('name').lower().replace(' ', '_') == name:
-                    item[key] = value
-                    found = True
-            if not found:
-                await interaction.response.send_message('Item not found', ephemeral=True)
-                return
+                return 'Invalid request'
+            name = formalize_item(name)
+            self.cursor.execute(f'UPDATE shop SET {key} = ? WHERE name = ? AND page = ?', (value, name, page))
         else:
-            await interaction.response.send_message('Invalid key', ephemeral=True)
-            return
-        self.datautil.updateData({'shop_inventory':shop_inventory})
-        await interaction.response.send_message(f'{key} updated to {value}', ephemeral=True)
+            return 'Invalid key'
+        if self.cursor.rowcount:
+            update_database(self.db)
+            return f'{key} updated to {value}'
+        else:
+            return 'Item not found'
 
     @nextcord.slash_command(guild_ids=[1093195040320389200], description='Purchase an item from the shop!')
     async def buy(self, interaction : nextcord.Interaction, item_name : Optional[str] = nextcord.SlashOption(required=True, description='name of the item to be purchased'), quantity : Optional[int] = nextcord.SlashOption(required=False, description='number of items to purchase')):
@@ -176,40 +169,29 @@ class Shop(commands.Cog):
         if quantity < 1:
             await interaction.response.send_message('invalid quantity', ephemeral=True)
             return
-        item_name = item_name.strip().lower().replace(' ', '_')
-        self.data = self.datautil.load()
-        shop_inventory = self.data.get('shop_inventory')
-        total = -1
-        for key in shop_inventory.keys():
-            value = shop_inventory.get(key)
-            for item in value.get('items'):
-                if item.get('name').strip().lower().replace(' ', '_') == item_name:
-                    total = int(item.get('price'))*quantity
-        if total < 0:
+        item_name = normalize_item(item_name)
+        item_name, price = self.get_item_and_price(item_name)
+        if item_name is None or price is None:
             await interaction.response.send_message('invalid item', ephemeral=True)
             return
-        cursor = self.db.cursor()
-        cursor.execute(f'SELECT money, {item_name} FROM bag WHERE user = ?', (interaction.user.id,))
-        result = cursor.fetchone()
+        total = price*quantity
+        self.cursor.execute(f'SELECT money FROM levels WHERE user = ?', (interaction.user.id,))
+        result = self.cursor.fetchone()
         money = result[0]
-        item_q = result[1]
         if money < total:
-            await interaction.response.send_message('you don\'t have enough money to buy that', ephemeral=True)
-            cursor.close()
+            await interaction.response.send_message(f'You don\'t have enough money to buy {format_item(item_name)}', ephemeral=True)
             return
         view = ConfirmView()
-        await interaction.response.send_message(f'Are you sure you would like to buy `{modify_string(item_name)}` x{quantity} for `${total}`?', view=view, ephemeral=True)
+        await interaction.response.send_message(f'Are you sure you would like to buy `{format_item(item_name)}` x{quantity} for `${total}`?', view=view, ephemeral=True)
         await view.wait()
         if view.value == True:
-            cursor.execute('UPDATE bag SET money = ? WHERE user = ?', (money-total, interaction.user.id))
-            cursor.execute(f'UPDATE bag SET {item_name} = ? WHERE user = ?', (item_q+quantity, interaction.user.id))
-            self.db.commit()
-        cursor.close()
+            give_item(self.cursor, interaction.user, {item_name: quantity})
+            self.cursor.execute('UPDATE levels SET money = ? WHERE user = ?', (money-total, interaction.user.id))
+            update_database(self.db)
 
     @nextcord.slash_command(guild_ids=[1093195040320389200], description='Sell items from your bag. Items sell for 25% of their purchase price. Rare candies cannot be sold.')
     async def sell(self, interaction : nextcord.Interaction, item_name : Optional[str] = nextcord.SlashOption(required=True, description='name of the item to be sold'), quantity : Optional[int] = nextcord.SlashOption(required=False, description='number of items to sell')):
-        item_name = item_name.strip().lower().replace(' ', '_')
-        if item_name == 'rare_candy':
+        if item_name == 'rarecandy':
             await interaction.response.send_message('invalid item', ephemeral=True)
             return
         if not quantity:
@@ -217,37 +199,33 @@ class Shop(commands.Cog):
         if quantity < 1:
             await interaction.response.send_message('invalid quantity', ephemeral=True)
             return
-        self.data = self.datautil.load()
-        shop_inventory = self.data.get('shop_inventory')
-        total = -1
-        for key in shop_inventory.keys():
-            value = shop_inventory.get(key)
-            for item in value.get('items'):
-                if item.get('name').strip().lower().replace(' ', '_') == item_name:
-                    total = int(int(item.get('price'))*quantity*0.25)
-        if total < 0:
+        item_name = normalize_item(item_name)
+        item_name, price = self.get_item_and_price(item_name)
+        if item_name is None or price is None:
             await interaction.response.send_message('invalid item', ephemeral=True)
             return
-        cursor = self.db.cursor()
-        cursor.execute(f'SELECT money, {item_name} FROM bag WHERE user = ?', (interaction.user.id,))
-        result = cursor.fetchone()
+        total = (price*quantity)//4
+        self.cursor.execute(f'SELECT money, {item_name} FROM bag WHERE user = ?', (interaction.user.id,))
+        result = self.cursor.fetchone()
         money = result[0]
-        item_q = result[1]
+        bag = json.loads(result[1])
+        if item_name in bag:
+            item_q = bag[item_name]
+        else:
+            item_q = 0
         if quantity > item_q:
-            await interaction.response.send_message(f'you do not have enough {modify_string(item_name)} to sell', ephemeral=True)
-            cursor.close()
+            await interaction.response.send_message(f'You don\'t have enough {format_item(item_name)} to sell', ephemeral=True)
             return
         view = ConfirmView()
-        await interaction.response.send_message(f'Are you sure you would like to sell `{modify_string(item_name)}` x{quantity} for `${total}`?', view=view, ephemeral=True)
+        await interaction.response.send_message(f'Are you sure you would like to sell `{format_item(item_name)}` x{quantity} for `${total}`?', view=view, ephemeral=True)
         await view.wait()
         if view.value == True:
-            cursor.execute('UPDATE bag SET money = ? WHERE user = ?', (money+total, interaction.user.id))
-            cursor.execute(f'UPDATE bag SET {item_name} = ? WHERE user = ?', (item_q-quantity, interaction.user.id))
-            self.db.commit()
-        cursor.close()
+            bag[item_name] -= quantity
+            self.cursor.execute('UPDATE levels SET money = ?, bag = ? WHERE user = ?', (money+total, json.dumps(bag), interaction.user.id))
+            update_database(self.db)
 
     def __del__(self):
-        self.db.close()
+        pass
 
 def setup(client : nextcord.Client):
     client.add_cog(Shop(client))

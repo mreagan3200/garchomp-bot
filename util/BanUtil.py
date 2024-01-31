@@ -1,7 +1,4 @@
 import nextcord
-from nextcord.ext import commands
-import logging
-import os
 
 async def kick(member : nextcord.Member, reason=None):
     await member.kick(reason=reason)

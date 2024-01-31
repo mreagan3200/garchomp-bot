@@ -30,9 +30,9 @@ class Birthdays(commands.Cog):
             user_id, year = entry
             member = guild.get_member(user_id)
             if year is not None:
-                description += f'Happy {self.ordinal(int(current_year)-int(year))} birthday to {member.mention}!\n'
+                description += f'Happy {self.ordinal(int(current_year)-int(year))} birthday, {member.mention}!\n'
             else:
-                description += f'Happy birthday to {member.mention}!\n'
+                description += f'Happy birthday, {member.mention}!\n'
         color = guild.get_member(random.choice(birthdays_list)[0]).color
 
         embed = nextcord.Embed(title='Happy Birthday!', description=description, color=color)
