@@ -12,7 +12,7 @@ emote_server_id = 1097591742766776463
 level_roles = ['Level 1', 'Level 10', 'Level 20', 'Level 30', 'Level 40', 'Level 50', 'Level 60', 
                'Level 70', 'Level 80', 'Level 90', 'Level 100']
 xp_map = {'xs':100, 's':800, 'm':3000, 'l':10000, 'xl':30000}
-valid_moves = ['disable', 'knock_off', 'thief']
+valid_moves = ['disable', 'knock_off', 'thief', 'test']
 
 async def add_role(member : nextcord.Member, role : nextcord.Role):
     if role not in member.roles:
