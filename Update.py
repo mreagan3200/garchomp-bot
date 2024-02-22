@@ -12,7 +12,7 @@ GIT_TOKEN = os.getenv('GIT_TOKEN')
 
 repo_owner = 'mreagan3200'
 repo_name = 'garchomp-bot'
-bot_command = 'python main.py'
+bot_command = 'python3 main.py'
 
 headers = {'Authorization': f'token {GIT_TOKEN}'}
 since_time = (datetime.now() - timedelta(days=2)).isoformat()

@@ -260,8 +260,10 @@ async def generate_leaderboard(leaderboard_list : list):
         draw.rectangle((0, i*75, 680, i*75+70), fill='black')
         font = ImageFont.truetype('calibrib.ttf', size=40)
         text = f'#{i+1}'
-        w, h = font.getsize(text)
-        draw.text((80 + (70-w)//2, (i*75) + (70-h)//2), text, fill='#394173', font=font)
+        _, _, t, b = font.getbbox(text)
+        w = font.getlength(text)
+        h = t-b
+        draw.text((80 + (70-w)//2, (i*75) + (50-h)//2), text, fill='#394173', font=font)
         color = str(member.color)
         color = '#ffffff' if color == '#000000' else color
         member_text = member.name
@@ -278,13 +280,17 @@ async def generate_leaderboard(leaderboard_list : list):
         while text_width > max_width:
             font = ImageFont.truetype('calibri.ttf', size=font.size-1)
             text_width = draw.textlength(member_text, font=font)
-        w, h = font.getsize(member_text)
-        draw.text((170, (i*75) + (70-h)//2), member_text, fill=color, font=font)
+        _, _, t, b = font.getbbox(member_text)
+        w = font.getlength(member_text)
+        h = t-b
+        draw.text((170, (i*75) + (90-h)//2), member_text, fill=color, font=font)
         
         font = ImageFont.truetype('calibri.ttf', size=30)
         level_text = f'Level: {level}'
-        w, h = font.getsize(level_text)
-        draw.text((520, (i*75) + (70-h)//2), level_text, fill='#5A6A9C', font=font)
+        _, _, t, b = font.getbbox(level_text)
+        w = font.getlength(level_text)
+        h = t-b
+        draw.text((520, (i*75) + (130-h)//2), level_text, fill='#5A6A9C', font=font)
     image.save(image_path)
 
 def format_item(item_name : str):

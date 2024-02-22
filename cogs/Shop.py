@@ -48,7 +48,6 @@ def shopEmbed(pageNum=1):
         else:
             description += f'${price} `{format_item(name)}` {desc} \n'
     cursor.close()
-    color = int(color.hex(), 16) if type(color) == bytes else int(color)
     embed = nextcord.Embed(title=title, description=description, color=nextcord.Colour(color))
     embed.set_footer(text=f'{pageNum}/{length}')
     return embed
@@ -145,15 +144,20 @@ class Shop(commands.Cog):
         return message
     
     async def editshop(self, key, value, page, name=None):
+        value = value.strip()
+        page = int(page)
         if key == 'title':
             self.cursor.execute(f'UPDATE shopdata SET title = ? WHERE page = ?', (value, page))
         elif key == 'color':
-            self.cursor.execute(f'UPDATE shopdata SET color = UNHEX(?) WHERE page = ?', (value, page))
-        elif key in ('name', 'price', 'desc'):
+            self.cursor.execute(f'UPDATE shopdata SET color = ? WHERE page = ?', (int(value,16), page))
+        elif key in ('name', 'desc'):
             if name is None:
                 return 'Invalid request'
             name = formalize_item(name)
             self.cursor.execute(f'UPDATE shop SET {key} = ? WHERE name = ? AND page = ?', (value, name, page))
+        elif key in ('price'):
+            name = formalize_item(name)
+            self.cursor.execute(f'UPDATE shop SET {key} = ? WHERE name = ? AND page = ?', (int(value), name, page))
         else:
             return 'Invalid key'
         if self.cursor.rowcount:

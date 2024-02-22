@@ -23,9 +23,8 @@ async def command(interaction : nextcord.Interaction, command : str, args : Opti
         await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
         return
     command = command.lower()
-    args = args.lower()
     message = f'Invalid args: {str(args)}'
-    args = [] if args is None else args.split(' ')
+    args = [] if args is None else args.split(',')
     match command:
         case 'addshopitem':
             if len(args) == 4:
