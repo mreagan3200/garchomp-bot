@@ -5,11 +5,7 @@ import sqlite3
 
 from util.DataUtil import *
 from util.RolesUtil import *
-import shared
-
-''' 
-Pay Day, Lock On, Trick
-'''
+from shared import *
 
 class DBConnection:
     _instance = None
@@ -26,7 +22,6 @@ class DBConnection:
 def shopEmbed(pageNum=1):
     conn = DBConnection()
     description = ''
-    client = shared.client
     emote_guild = client.get_guild(emote_server_id)
     cursor = conn.db.cursor()
     cursor.execute('SELECT title, color FROM shopdata WHERE page = ?', (pageNum,))
@@ -108,7 +103,7 @@ class Shop(commands.Cog):
                 return row
         return None, None
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='View shop items.')
+    @nextcord.slash_command(guild_ids=[server_id], description='View shop items.')
     async def shop(self, interaction : nextcord.Interaction):
         ui = ShopUI()
         embed = shopEmbed()
@@ -166,7 +161,7 @@ class Shop(commands.Cog):
         else:
             return 'Item not found'
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Purchase an item from the shop!')
+    @nextcord.slash_command(guild_ids=[server_id], description='Purchase an item from the shop!')
     async def buy(self, interaction : nextcord.Interaction, item_name : Optional[str] = nextcord.SlashOption(required=True, description='name of the item to be purchased'), quantity : Optional[int] = nextcord.SlashOption(required=False, description='number of items to purchase')):
         if not quantity:
             quantity = 1
@@ -193,7 +188,7 @@ class Shop(commands.Cog):
             self.cursor.execute('UPDATE levels SET money = ? WHERE user = ?', (money-total, interaction.user.id))
             update_database(self.db)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Sell items from your bag. Items sell for 25% of their purchase price. Rare candies cannot be sold.')
+    @nextcord.slash_command(guild_ids=[server_id], description='Sell items from your bag. Items sell for 25% of their purchase price. Rare candies cannot be sold.')
     async def sell(self, interaction : nextcord.Interaction, item_name : Optional[str] = nextcord.SlashOption(required=True, description='name of the item to be sold'), quantity : Optional[int] = nextcord.SlashOption(required=False, description='number of items to sell')):
         if item_name == 'rarecandy':
             await interaction.response.send_message('invalid item', ephemeral=True)

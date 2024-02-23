@@ -4,6 +4,7 @@ from typing import Optional
 
 from util.RolesUtil import *
 from util.DataUtil import *
+from shared import *
 
 import sqlite3
 import numpy as np
@@ -32,7 +33,7 @@ class Level(commands.Cog):
         await addXP(self.cursor, message.author, message=True)
         update_database(self.db)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='init', description='Initialize a user\'s xp and reset level role.')
+    @nextcord.slash_command(guild_ids=[server_id], name='init', description='Initialize a user\'s xp and reset level role.')
     async def init(self, interaction : nextcord.Interaction, user : Optional[nextcord.Member] = nextcord.SlashOption(required=False, description='member to initialize. member is self if omitted.')):
         if user is None:
             user = interaction.user
@@ -45,7 +46,7 @@ class Level(commands.Cog):
             await interaction.response.send_message(f'{user.name} is already initialized', ephemeral=True)
         update_database(self.db)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='summary', description='Generate a summary of a user\'s stats.')
+    @nextcord.slash_command(guild_ids=[server_id], name='summary', description='Generate a summary of a user\'s stats.')
     async def info(self, interaction : nextcord.Interaction, user : Optional[nextcord.Member] = nextcord.SlashOption(required=False, description='member to generate stats. member is self if omitted.')):
         if user is None:
             user = interaction.user
@@ -83,7 +84,7 @@ class Level(commands.Cog):
         update_database(self.db)
         return f'Added {xp} XP to {member.name}'
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='leaderboard', description='Generate a leaderboard of the top 10 highest leveled users.')
+    @nextcord.slash_command(guild_ids=[server_id], name='leaderboard', description='Generate a leaderboard of the top 10 highest leveled users.')
     async def leaderboard(self, interaction : nextcord.Interaction):
         self.cursor.execute('SELECT user, level FROM levels WHERE user != ? ORDER BY total_xp DESC ', (1093965324988194886,))
         result = self.cursor.fetchall()
@@ -93,7 +94,7 @@ class Level(commands.Cog):
             if user is not None:
                 leaderboard_list.append(r)
         await generate_leaderboard(leaderboard_list)
-        guild = self.client.get_guild(1093195040320389200)
+        guild = self.client.get_guild(server_id)
         color = guild.get_member(self.client.user.id).color
         embed = nextcord.Embed(color=color)
         file = nextcord.File(f'data/leaderboard/leaderboard.png', filename='leaderboard.png')  
@@ -101,7 +102,7 @@ class Level(commands.Cog):
 
         await interaction.response.send_message(file=file, embed=embed)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Give item to a user.')
+    @nextcord.slash_command(guild_ids=[server_id], description='Give item to a user.')
     async def giveitem(self, interaction : nextcord.Interaction, member : Optional[nextcord.Member] = nextcord.SlashOption(required=True, description='user to give item to'), item : Optional[str] = nextcord.SlashOption(required=True, description='item to give'), quantity : Optional[str] = nextcord.SlashOption(required=False, description='amount to give')):
         if quantity is not None:
             if quantity.lower() != 'all' and not quantity.isdigit():
@@ -122,7 +123,7 @@ class Level(commands.Cog):
         update_database(self.db)
         await interaction.response.send_message('done', ephemeral=True)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Use an item from the bag.')
+    @nextcord.slash_command(guild_ids=[server_id], description='Use an item from the bag.')
     async def useitem(self, interaction : nextcord.Interaction, item : Optional[str] = nextcord.SlashOption(required=True, description='item to use'), quantity : Optional[str] = nextcord.SlashOption(required=False, description='amount to use')):
         if quantity is not None:
             if quantity.lower() != 'all' and not quantity.isdigit():
@@ -135,16 +136,16 @@ class Level(commands.Cog):
             await interaction.response.send_message('failed', ephemeral=True)
         update_database(self.db)
     
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Use a move tm from the bag.')
+    @nextcord.slash_command(guild_ids=[server_id], description='Use a move tm from the bag.')
     async def usemove(self, interaction : nextcord.Interaction, move : str, target : Optional[nextcord.Member] = nextcord.SlashOption(required=False, description='target of the move')):
         self.cursor.execute('SELECT debuffs FROM levels WHERE user = ?', (interaction.user.id,))
         t1 = int(json.loads(self.cursor.fetchone()[0]).get('move_cd'))
         t2 = int(time())
-        # if t2 < t1: TODO: remove
-        #     h, m, s = seconds_to_hms(t1-t2)
-        #     await interaction.response.send_message(f'This command is on cooldown. Try again in {h}h {m}m {s}s', ephemeral=True)
-        #     return
-        move, success = await use_move(self.cursor, move, interaction.user, target)
+        if t2 < t1:
+            h, m, s = seconds_to_hms(t1-t2)
+            await interaction.response.send_message(f'This command is on cooldown. Try again in {h}h {m}m {s}s', ephemeral=True)
+            return
+        move, success = await use_move(self.cursor, move, interaction.user, target, interaction)
         if success:
             embed = nextcord.Embed(title=f'{interaction.user.name} used {format_item(move)}!', 
                                     description=f'{success}\nThe {format_item(move)} TM was used up...',
@@ -153,14 +154,17 @@ class Level(commands.Cog):
             debuffs = json.loads(self.cursor.fetchone()[0])
             debuffs['move_cd'] = int(t2 + 8*60*60)
             self.cursor.execute('UPDATE levels SET debuffs = ? WHERE user = ?', (json.dumps(debuffs), interaction.user.id))
-            await interaction.response.send_message(embed=embed)
+            if interaction.response.is_done():
+                await interaction.channel.send(embed=embed)
+            else:
+                await interaction.response.send_message(embed=embed)
         elif move: # Do not have TM
             await interaction.response.send_message(f'You do not have a {format_item(move)} TM', ephemeral=True)
         else: # Invalid Move
             await interaction.response.send_message('Invalid Move', ephemeral=True)
         update_database(self.db)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='bag', description='Generate bag contents.')
+    @nextcord.slash_command(guild_ids=[server_id], name='bag', description='Generate bag contents.')
     async def bag(self, interaction : nextcord.Interaction):
         self.cursor.execute('SELECT money, bag, held_item FROM levels WHERE user = ?', (interaction.user.id,))
         q = self.cursor.fetchone()
@@ -180,11 +184,15 @@ class Level(commands.Cog):
         other_items = {k: v for k, v in bag.items() if 'candy' not in k and v > 0}
         custom_order = ['xp_candy_xs', 'xp_candy_s', 'xp_candy_m', 'xp_candy_l', 'xp_candy_xl', 'rare_candy']
         for item in sorted(other_items.keys()):
-            emoji = nextcord.utils.get(emote_guild.emojis, name=item)
-            if emoji:
+            if item in valid_moves:
+                emoji = nextcord.utils.get(emote_guild.emojis, name='tm')
                 description += f'{emoji} x{other_items[item]}\t`{format_item(item)}`\n'
             else:
-                description += f'{format_item(item)} x{other_items[item]}\n'
+                emoji = nextcord.utils.get(emote_guild.emojis, name=item)
+                if emoji:
+                    description += f'{emoji} x{other_items[item]}\t`{format_item(item)}`\n'
+                else:
+                    description += f'{format_item(item)} x{other_items[item]}\n'
         for item in custom_order:
             if item in xp_candies:
                 emoji = nextcord.utils.get(emote_guild.emojis, name=item)
@@ -196,7 +204,7 @@ class Level(commands.Cog):
         embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
         await interaction.response.send_message(embed=embed)
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Change held item')
+    @nextcord.slash_command(guild_ids=[server_id], description='Change held item')
     async def changehelditem(self, interaction : nextcord.Interaction, item : Optional[str] = nextcord.SlashOption(required=False, description='item to hold')):
         self.cursor.execute('SELECT held_item, bag FROM levels WHERE user = ?', (interaction.user.id,))
         q = self.cursor.fetchone()

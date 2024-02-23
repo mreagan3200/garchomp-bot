@@ -17,7 +17,7 @@ if shared.client is None:
 async def on_ready():
     print(f'Logged in as {shared.client.user}')
 
-@shared.client.slash_command(guild_ids=[1093195040320389200], description='Secret commands. Must be an administrator to use.')
+@shared.client.slash_command(guild_ids=[shared.server_id], description='Secret commands. Must be an administrator to use.')
 async def command(interaction : nextcord.Interaction, command : str, args : Optional[str] = nextcord.SlashOption(required=False), member : Optional[nextcord.Member] = nextcord.SlashOption(required=False)):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message('You are not authorized to run this command', ephemeral=True)
@@ -45,9 +45,9 @@ async def command(interaction : nextcord.Interaction, command : str, args : Opti
             if len(args) == 1:
                 message = await getattr(shared.client.get_cog('Starboard'), 'changeminstars')(int(args[0]))
         case 'resetreactionroles':
-            interaction.response.defer()
+            await interaction.response.defer(ephemeral=True)
             await getattr(shared.client.get_cog('ReactionRoles'), 'resetreactionroles')()
-            interaction.followup.send('done', ephemeral=True)
+            await interaction.followup.send('done', ephemeral=True)
             return
         case 'restorebackup':
             message = await getattr(shared.client.get_cog('Maintenance'), 'restore_backup')()
@@ -111,8 +111,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("Received Ctrl+C. Exiting gracefully...")
     finally:
-        client = shared.client
-        if client:
+        if shared.client:
             print('closing client')
             loop.run_until_complete(shared.client.close())
     loop.close()

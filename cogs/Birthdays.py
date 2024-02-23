@@ -8,6 +8,8 @@ from datetime import date
 import random
 import os
 
+from shared import *
+
 class Birthdays(commands.Cog):
     def __init__(self, client : nextcord.Client):
         self.client = client
@@ -24,7 +26,7 @@ class Birthdays(commands.Cog):
         return str(n) + suffix
 
     async def send_birthday_message(self, birthdays_list, current_year):
-        guild = self.client.get_guild(1093195040320389200)
+        guild = self.client.get_guild(server_id)
         description = ''
         for entry in birthdays_list:
             user_id, year = entry
@@ -42,7 +44,7 @@ class Birthdays(commands.Cog):
         file = nextcord.File(f'{path}/{img}', filename=img)  
         embed.set_thumbnail(url=f'attachment://{img}')
 
-        channel = guild.get_channel(1094286349550485644)
+        channel = guild.get_channel(announcements_channel_id)
         await channel.send(file=file, embed=embed)
     
     async def check_birthdays(self):
@@ -53,7 +55,7 @@ class Birthdays(commands.Cog):
         if len(birthdays_list) > 0:
             await self.send_birthday_message(birthdays_list, year)
     
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='setbirthday', description='Set your birthday. Year is optional.')
+    @nextcord.slash_command(guild_ids=[server_id], name='setbirthday', description='Set your birthday. Year is optional.')
     async def setbirthday(self, interaction : nextcord.Interaction, month : int, day : int, year : Optional[int] = nextcord.SlashOption(required=False), member : Optional[nextcord.Member] = nextcord.SlashOption(required=False)):
         if (member is not None) and (not interaction.user.guild_permissions.administrator):
             await interaction.response.send_message('You are not authorized to set other user\'s birthdays', ephemeral=True)
@@ -80,7 +82,7 @@ class Birthdays(commands.Cog):
         finally:
             cursor.close()
     
-    @nextcord.slash_command(guild_ids=[1093195040320389200], name='removebirthday', description='Remove your birthday.')
+    @nextcord.slash_command(guild_ids=[server_id], name='removebirthday', description='Remove your birthday.')
     async def removebirthday(self, interaction : nextcord.Interaction, member : Optional[nextcord.Member] = nextcord.SlashOption(required=False)):
         if (member is not None) and (not interaction.user.guild_permissions.administrator):
             await interaction.response.send_message('You are not authorized to remove other user\'s birthdays', ephemeral=True)

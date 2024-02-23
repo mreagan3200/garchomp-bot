@@ -1,5 +1,6 @@
 import nextcord
-import shared
+from nextcord.utils import MISSING
+from shared import *
 from collections import defaultdict
 import random
 import numpy as np
@@ -7,12 +8,12 @@ import json
 from time import time
 import io
 from PIL import Image, ImageDraw, ImageFont
+import random
 
-emote_server_id = 1097591742766776463
-level_roles = ['Level 1', 'Level 10', 'Level 20', 'Level 30', 'Level 40', 'Level 50', 'Level 60', 
-               'Level 70', 'Level 80', 'Level 90', 'Level 100']
+level_roles = ['Level 1', 'Level 10', 'Level 20', 'Level 30', 'Level 40', 'Level 50', 
+               'Level 60', 'Level 70', 'Level 80', 'Level 90', 'Level 100']
 xp_map = {'xs':100, 's':800, 'm':3000, 'l':10000, 'xl':30000}
-valid_moves = ['disable', 'knock_off', 'thief', 'test']
+valid_moves = ['disable', 'knock_off', 'thief', 'pay_day']
 
 async def add_role(member : nextcord.Member, role : nextcord.Role):
     if role not in member.roles:
@@ -30,10 +31,10 @@ async def administrator_command_executed(interaction : nextcord.Interaction):
     command = f'/{command_name}'
     iddict = interaction.data
     if iddict.get('type') == 6:
-        command += ' ' + str(iddict.get('name')) + ': ' + str(shared.client.get_user(int(iddict.get('value'))).mention)
+        command += ' ' + str(iddict.get('name')) + ': ' + str(client.get_user(int(iddict.get('value'))).mention)
     else:
         command += ' ' + str(iddict.get('name')) + ': ' + str(iddict.get('value'))
-    channel = shared.client.get_channel(1093921362961252372)
+    channel = client.get_channel(1093921362961252372)
     embed = nextcord.Embed(title='command executed', description=command, color=interaction.user.color)
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
     # await channel.send(embed=embed) TODO: remove
@@ -160,14 +161,14 @@ async def update_level_role(cursor, member : nextcord.Member):
     level = level[0]
     if current_role is None:
         new_role_index = min(level//10,10)
-        guild = shared.client.guilds[0]
+        guild = client.guilds[0]
         role = nextcord.utils.get(guild.roles, name=level_roles[new_role_index])
         await add_role(member, role)
     else:
         current_role_index = int(current_role.name[6:])//10
         new_role_index = min(level//10,10)
         if new_role_index != current_role_index:
-            guild = shared.client.get_guild(1093195040320389200)
+            guild = client.get_guild(server_id)
             role = nextcord.utils.get(guild.roles, name=level_roles[new_role_index])
             await add_role(member, role)
             await remove_role(member, current_role)
@@ -188,8 +189,8 @@ async def init_user_level(cursor, member : nextcord.Member):
         return True
     
 async def sendLevelUpMessage(user : nextcord.Member, newLevel, rewards):
-    bot_commands = shared.client.get_channel(1094723044888547448)
-    emote_guild = shared.client.get_guild(emote_server_id)
+    bot_commands = client.get_channel(bot_commands_id)
+    emote_guild = client.get_guild(emote_server_id)
     description = 'Rewards'
     for k,v in rewards.items():
         description += '\n'
@@ -254,7 +255,7 @@ async def generate_leaderboard(leaderboard_list : list):
 
     for i in range(length):
         user_id, level = leaderboard_list[i]
-        guild = shared.client.get_guild(1093195040320389200)
+        guild = client.get_guild(server_id)
         member = guild.get_member(user_id)
 
         draw.rectangle((0, i*75, 680, i*75+70), fill='black')
@@ -309,7 +310,32 @@ def formalize_item(item_name : str):
 def normalize_item(item_name : str):
     return item_name.strip().lower().replace(' ', '').replace('_', '')
 
-def thief(cursor, target : nextcord.Member=None, user : nextcord.Member=None):
+class WagerView(nextcord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.value = None
+
+    @nextcord.ui.button(label="10%", style=nextcord.ButtonStyle.green)
+    async def ten_button(self, button, interaction : nextcord.Interaction):
+        self.value = 0.1
+        self.stop()
+
+    @nextcord.ui.button(label="25%", style=nextcord.ButtonStyle.blurple)
+    async def twentyfive_button(self, button, interaction : nextcord.Interaction):
+        self.value = 0.25
+        self.stop()
+    
+    @nextcord.ui.button(label="50%", style=nextcord.ButtonStyle.blurple)
+    async def fifty_button(self, button, interaction : nextcord.Interaction):
+        self.value = 0.5
+        self.stop()
+
+    @nextcord.ui.button(label="100%", style=nextcord.ButtonStyle.danger)
+    async def onehundred_button(self, button, interaction : nextcord.Interaction):
+        self.value = 1
+        self.stop()
+
+async def thief(cursor, target : nextcord.Member=None, user : nextcord.Member=None, interaction : nextcord.Interaction=None):
     cursor.execute('SELECT money, held_item FROM levels WHERE user = ?', (target.id,))
     r = cursor.fetchone()
     target_money = r[0]
@@ -327,16 +353,16 @@ def thief(cursor, target : nextcord.Member=None, user : nextcord.Member=None):
         cursor.execute('UPDATE levels SET money = ? WHERE user = ?', (user_money+stolen_money, user.id))
         return f'{target.name} lost ${stolen_money} and {user.name} gained ${received_money}!'
 
-def knock_off(cursor, target : nextcord.Member=None, user : nextcord.Member=None):
+async def knock_off(cursor, target : nextcord.Member=None, user : nextcord.Member=None, interaction : nextcord.Interaction=None):
     cursor.execute('SELECT held_item FROM levels WHERE user = ?', (target.id,))
-    item = cursor.fetchone()[0]
-    if item is None:
+    target_item = cursor.fetchone()[0]
+    if target_item is None:
         return 'but it failed.'
     else:
         cursor.execute('UPDATE levels SET held_item = ? WHERE user = ?', (None, target.id,))
-        return f'{target.name}\'s {format_item(item)} was knocked off!'
+        return f'{target.name}\'s {format_item(target_item)} was knocked off!'
 
-def disable(cursor, target : nextcord.Member=None, user : nextcord.Member=None):
+async def disable(cursor, target : nextcord.Member=None, user : nextcord.Member=None, interaction : nextcord.Interaction=None):
     cursor.execute('SELECT buffs, debuffs FROM levels WHERE user = ?', (target.id,))
     q = cursor.fetchone()
     buffs = json.loads(q[0])
@@ -351,13 +377,55 @@ def disable(cursor, target : nextcord.Member=None, user : nextcord.Member=None):
     cursor.execute('UPDATE levels SET buffs = ?, debuffs = ? WHERE user = ?', (json.dumps(buffs), json.dumps(debuffs), target.id))
     return f'{target.name}\'s moves have been disabled for 24 hours!'
 
-async def use_move(cursor, move : str, user : nextcord.Member, target : nextcord.Member):
+async def pay_day(cursor, target : nextcord.Member=None, user : nextcord.Member=None, interaction : nextcord.Interaction=None):
+    cursor.execute('SELECT money, held_item FROM levels WHERE user = ?', (user.id,))
+    money, held_item = cursor.fetchone()
+    
+    view = WagerView()
+    message = await interaction.response.send_message(f'Choose your wager amount! (total bank: ${money})', view=view, ephemeral=True)
+    await view.wait()
+    percent = view.value
+    wager = int(money*percent)
+    await message.edit(content=f'Amount wagered: {int(percent*100)}% (${wager})', view=None)
+    r = random.random()
+    net = 0
+    if held_item == 'loaded_dice':
+        r *= 2
+    if r < 0.3:
+        net = wager * 0.5
+    elif r < 0.6:
+        net = wager * 1.1
+    elif r < 0.8:
+        net = wager * 1.3
+    elif r < 0.9:
+        net = wager * 1.5
+    elif r < 1:
+        net = wager * 2
+    else:
+        net = wager*(4+(r-1))
+        net -= wager
+        net = int(net)
+        return f'JACKPOT!!!\n {user.name} earned ${net}!'
+    if held_item == 'amulet_coin':
+        net *= 2
+    net -= wager
+    net = int(net)
+    if net >= 0:
+        return f'{user.name} earned ${net}!'
+    else:
+        return f'{user.name} lost ${abs(net)}'
+
+async def use_move(cursor, move : str, user : nextcord.Member, target : nextcord.Member, interaction : nextcord.Interaction):
     move = search_list(valid_moves, move)
     if move:
         q = remove_item(cursor, user, {move: 1})
         if q == 0:
             return format_item(move), None
-        return format_item(move), globals()[move](cursor, target, user)
+        if target is not None:
+            cursor.execute('SELECT held_item FROM levels WHERE user = ?', (target.id,))
+            if cursor.fetchone()[0] == 'bright_powder' and random.random() > 0.9:
+                return format_item(move), 'but it missed.'
+        return format_item(move), await globals()[move](cursor, target, user, interaction)
     else:
         return None, None
 

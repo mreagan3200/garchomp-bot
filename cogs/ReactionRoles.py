@@ -3,6 +3,7 @@ from nextcord.ext import commands
 from util.RolesUtil import *
 from util.BanUtil import *
 from util.DataUtil import *
+from shared import *
 
 import random
 
@@ -11,7 +12,6 @@ type_roles = ['Normal', 'Fire', 'Water', 'Grass', 'Electric', 'Ice', 'Fighting',
 role_colors = [11052922, 15630640, 6525168, 8046412, 16240684, 9886166, 12725800, 10698401, 14860133, 
                11112435, 16340359, 10926362, 11968822, 7559063, 7362374, 7288316, 12040142, 14058925]
 react_roles_dict = {'knook':'Chess', 'vicowboy':'League', 'pokeball':'Pokemon'}
-emote_server_id = 1097591742766776463
 
 class ReactionRoles(commands.Cog):
     def __init__(self, client : nextcord.Client):
@@ -77,9 +77,9 @@ class ReactionRoles(commands.Cog):
                 await remove_role(member, role)
 
     async def resetreactionroles(self):
-        roles_channel = self.client.get_channel(1093916970644156419)
-        guild = self.client.get_guild(1093195040320389200)
-        emote_guild = self.client.get_guild(1097591742766776463)
+        roles_channel = self.client.get_channel(reaction_roles_channel_id)
+        guild = self.client.get_guild(server_id)
+        emote_guild = self.client.get_guild(emote_server_id)
         color = guild.get_member(self.client.user.id).color
 
         async for message in roles_channel.history():
@@ -127,7 +127,7 @@ class ReactionRoles(commands.Cog):
         self.data = self.datautil.updateData({'react_message_ids':[type_message.id, channel_message.id, ban_message.id]})
 
     async def change_stellar_tera(self):
-        guild = self.client.get_guild(1093195040320389200)
+        guild = self.client.get_guild(server_id)
         role = guild.get_role(1190034205535645796)
         colors = role_colors.copy()
         colors.remove(role.color.value)

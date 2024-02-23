@@ -5,6 +5,7 @@ import sqlite3
 from datetime import datetime
 
 from util.DataUtil import *
+from shared import *
 
 class Starboard(commands.Cog):
     def __init__(self, client : nextcord.Client):
@@ -16,7 +17,7 @@ class Starboard(commands.Cog):
         self.cursor.execute('CREATE TABLE IF NOT EXISTS starboard (message INTEGER, original_message INTEGER, channel_id INTEGER, stars SMALLINT)')
     
     async def update_stars(self, message, stars):
-        starboard_message = await self.client.get_channel(1102065147046015099).fetch_message(message)
+        starboard_message = await self.client.get_channel(starboard_channel_id).fetch_message(message)
         embed = starboard_message.embeds[0]
         name = embed.author.name
         name = name[:name.rfind('⭐')+1] + str(stars)
@@ -48,7 +49,7 @@ class Starboard(commands.Cog):
                     embed.set_author(name=f'{message.author.display_name}  ⭐{stars.count}', icon_url=message.author.display_avatar.url)
                     time = message.created_at.astimezone(tz=datetime.now().astimezone().tzinfo)
                     embed.set_footer(text=time.strftime("%m/%d/%Y %I:%M %p"))
-                    starboard_channel = self.client.get_channel(1102065147046015099)
+                    starboard_channel = self.client.get_channel(starboard_channel_id)
                     starboard_message = await starboard_channel.send(embed=embed)
                     self.cursor.execute('INSERT INTO starboard (message, original_message, channel_id, stars) VALUES (?, ?, ?, ?)', (starboard_message.id, message.id, payload.channel_id, stars.count))
                 self.db.commit()
@@ -67,7 +68,7 @@ class Starboard(commands.Cog):
             if starboard_entry:
                 stars = stars.count if stars else 0
                 if stars == 0:
-                    starboard_message = await self.client.get_channel(1102065147046015099).fetch_message(starboard_entry[0])
+                    starboard_message = await self.client.get_channel(starboard_channel_id).fetch_message(starboard_entry[0])
                     self.cursor.execute('DELETE FROM starboard WHERE original_message = ?', (message.id,))
                     await starboard_message.delete()
                 else:
@@ -80,7 +81,7 @@ class Starboard(commands.Cog):
         self.data = self.datautil.load()
         return f'Minimum stars set to {stars} stars'
 
-    @nextcord.slash_command(guild_ids=[1093195040320389200], description='Generate top starboard messages.')
+    @nextcord.slash_command(guild_ids=[server_id], description='Generate top starboard messages.')
     async def starboard(self, interaction : nextcord.Interaction):
         await interaction.response.defer()
         self.cursor.execute('SELECT * FROM starboard ORDER BY stars DESC LIMIT 10')

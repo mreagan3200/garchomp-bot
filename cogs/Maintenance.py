@@ -1,6 +1,7 @@
 import nextcord
 import subprocess
 from nextcord.ext import commands
+from shared import *
 
 import os
 import io
@@ -13,15 +14,15 @@ class Maintenance(commands.Cog):
     
     @commands.Cog.listener()
     async def on_member_join(self, member : nextcord.Member):
-        guild = self.client.get_guild(1093195040320389200)
+        guild = self.client.get_guild(server_id)
         color = guild.get_member(self.client.user.id).color
         embed = nextcord.Embed(title=f'{member.name} has joined the server', color=color)
         embed.set_author(name=member.name, icon_url=member.display_avatar.url)
-        await self.client.get_channel(1093921362961252372).send(embed=embed)
+        await self.client.get_channel(mod_logs_id).send(embed=embed)
     
     @commands.Cog.listener()
     async def on_member_remove(self, member : nextcord.Member):
-        guild = self.client.get_guild(1093195040320389200)
+        guild = self.client.get_guild(server_id)
         color = guild.get_member(self.client.user.id).color
         timestamp = datetime.datetime.now() - datetime.timedelta(seconds=5)
         title = None
@@ -38,7 +39,7 @@ class Maintenance(commands.Cog):
             title='has left the server'
         embed = nextcord.Embed(title=f'{member.name} {title}', description=description, color=color)
         embed.set_author(name=member.name, icon_url=member.display_avatar.url)
-        await self.client.get_channel(1093921362961252372).send(embed=embed)
+        await self.client.get_channel(mod_logs_id).send(embed=embed)
     
     @commands.Cog.listener()
     async def on_thread_create(self, thread : nextcord.Thread):
@@ -47,11 +48,11 @@ class Maintenance(commands.Cog):
     @commands.Cog.listener()
     async def on_message_delete(self, message : nextcord.Message):
         if message.channel.category is not None:
-            guild = self.client.get_guild(1093195040320389200)
+            guild = self.client.get_guild(server_id)
             color = guild.get_member(self.client.user.id).color
             embed = nextcord.Embed(title='deleted message', description=message.content, color=color)
             embed.set_author(name=message.author.name, icon_url=message.author.display_avatar.url)
-            await self.client.get_channel(1093921362961252372).send(embed=embed)
+            await self.client.get_channel(mod_logs_id).send(embed=embed)
             
             files = None
             if message.attachments:
@@ -60,19 +61,19 @@ class Maintenance(commands.Cog):
                     image_bytes = await attachment.read()
                     image_io = io.BytesIO(image_bytes)
                     files.append(nextcord.File(image_io, attachment.filename))
-                await self.client.get_channel(1093921362961252372).send('Attachments:', files=files)
+                await self.client.get_channel(mod_logs_id).send('Attachments:', files=files)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before : nextcord.Message, after : nextcord.Message):
         if before.author.bot:
             return
         if before.channel.category is not None:
-            guild = self.client.get_guild(1093195040320389200)
+            guild = self.client.get_guild(server_id)
             color = guild.get_member(self.client.user.id).color
             description = f'**original**\n{before.content}\n**edited**\n{after.content}\n\n[**Source**]({after.jump_url})'
             embed = nextcord.Embed(title='edited message', description=description, color=color)
             embed.set_author(name=before.author.name, icon_url=before.author.display_avatar.url)
-            await self.client.get_channel(1093921362961252372).send(embed=embed)
+            await self.client.get_channel(mod_logs_id).send(embed=embed)
 
     @commands.Cog.listener()
     async def on_message(self, message : nextcord.Message):
@@ -85,7 +86,7 @@ class Maintenance(commands.Cog):
 
     async def dump_log_files(self):
         logs = os.listdir('./logs')
-        mod_logs = self.client.get_guild(1093195040320389200).get_channel(1093921362961252372)
+        mod_logs = self.client.get_guild(server_id).get_channel(mod_logs_id)
         for fileName in logs:
             message = fileName + '\n```'
             with open(f'logs/{fileName}', 'r') as log_file:
