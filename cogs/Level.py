@@ -97,7 +97,7 @@ class Level(commands.Cog):
         guild = self.client.get_guild(server_id)
         color = guild.get_member(self.client.user.id).color
         embed = nextcord.Embed(color=color)
-        file = nextcord.File(f'data/leaderboard/leaderboard.png', filename='leaderboard.png')  
+        file = nextcord.File(f'data/images/leaderboard.png', filename='leaderboard.png')  
         embed.set_image(url=f'attachment://leaderboard.png')
 
         await interaction.response.send_message(file=file, embed=embed)

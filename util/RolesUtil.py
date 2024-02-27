@@ -248,7 +248,7 @@ def getXPToAdd(last_xp_s : int, current_time : int, mult : float):
     return int(np.round(base*mult))
 
 async def generate_leaderboard(leaderboard_list : list):
-    image_path = 'data/leaderboard/leaderboard.png'
+    image_path = 'data/images/leaderboard.png'
     length = len(leaderboard_list)
     image = Image.new('RGBA', (680, length*70+(length-1)*5), color = (0,0,0,0))
     draw = ImageDraw.Draw(image)
