@@ -287,11 +287,11 @@ async def generate_leaderboard(leaderboard_list : list):
         draw.text((170, (i*75) + (90-h)//2), member_text, fill=color, font=font)
         
         font = ImageFont.truetype('calibri.ttf', size=30)
-        level_text = f'level: {level}'
+        level_text = f'Level: {level}'
         _, _, t, b = font.getbbox(level_text)
         w = font.getlength(level_text)
         h = t-b
-        draw.text((520, (i*75) + (130-h)//2), level_text, fill='#5A6A9C', font=font)
+        draw.text((520, (i*75) + (70-h)//2), level_text, fill='#5A6A9C', font=font)
     image.save(image_path)
 
 def format_item(item_name : str):
