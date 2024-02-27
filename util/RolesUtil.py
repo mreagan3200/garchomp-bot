@@ -287,7 +287,7 @@ async def generate_leaderboard(leaderboard_list : list):
         draw.text((170, (i*75) + (90-h)//2), member_text, fill=color, font=font)
         
         font = ImageFont.truetype('calibri.ttf', size=30)
-        level_text = f'Level: {level}'
+        level_text = f'level: {level}'
         _, _, t, b = font.getbbox(level_text)
         w = font.getlength(level_text)
         h = t-b
