@@ -1,5 +1,4 @@
 import nextcord
-from nextcord.utils import MISSING
 from shared import *
 from collections import defaultdict
 import random
@@ -37,7 +36,7 @@ async def administrator_command_executed(interaction : nextcord.Interaction):
     channel = client.get_channel(1093921362961252372)
     embed = nextcord.Embed(title='command executed', description=command, color=interaction.user.color)
     embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-    # await channel.send(embed=embed) TODO: remove
+    await channel.send(embed=embed)
 
 def search_dict(d, item):
     item = normalize_item(item)
