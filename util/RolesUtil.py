@@ -291,7 +291,7 @@ async def generate_leaderboard(leaderboard_list : list):
         _, _, t, b = font.getbbox(level_text)
         w = font.getlength(level_text)
         h = t-b
-        draw.text((520, (i*75) + (70-h)//2), level_text, fill='#5A6A9C', font=font)
+        draw.text((520, (i*75) + (70+h)//2), level_text, fill='#5A6A9C', font=font)
     image.save(image_path)
 
 def format_item(item_name : str):
