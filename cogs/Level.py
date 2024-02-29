@@ -21,7 +21,7 @@ class Level(commands.Cog):
     
     @commands.Cog.listener()
     async def on_member_join(self, member : nextcord.Member):
-        await init_user_level(member)
+        await init_user_level(self.cursor, member)
         update_database(self.db)
     
     @commands.Cog.listener()
